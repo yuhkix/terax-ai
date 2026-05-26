@@ -6,15 +6,19 @@
 //! to avoid collision with Claude's own event schema.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tauri::ipc::Channel;
+use tauri::AppHandle;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{ChildStdin, Command};
 use tokio::sync::{Mutex, Notify, RwLock};
+
+use super::mcp_listener;
 
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -30,7 +34,64 @@ pub struct SpawnOpts {
     pub add_dirs: Vec<String>,
     pub resume_claude_session_id: Option<String>,
     pub binary_path: Option<String>,
-    pub mcp_config_path: Option<String>,
+    pub enable_mcp: Option<bool>,
+}
+
+impl SpawnOpts {
+    fn mcp_enabled(&self) -> bool {
+        self.enable_mcp.unwrap_or(true)
+    }
+}
+
+fn mcp_config_path(session_id: &str) -> Option<PathBuf> {
+    let cache = dirs::cache_dir()?;
+    let dir = cache.join("terax").join("mcp");
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir.join(format!("{session_id}.json")))
+}
+
+fn write_mcp_config(
+    path: &PathBuf,
+    binary_path: &str,
+    port: u16,
+    token: &str,
+) -> std::io::Result<()> {
+    let cfg = json!({
+        "mcpServers": {
+            "terax": {
+                "command": binary_path,
+                "args": ["--mcp-stdio"],
+                "env": {
+                    "TERAX_MCP_PORT": port.to_string(),
+                    "TERAX_MCP_TOKEN": token,
+                }
+            }
+        }
+    });
+    std::fs::write(path, serde_json::to_vec_pretty(&cfg)?)
+}
+
+async fn build_mcp_for_session(
+    app: &AppHandle,
+    session_id: &str,
+) -> Result<(tokio::task::JoinHandle<()>, PathBuf), String> {
+    let exe = std::env::current_exe()
+        .map_err(|e| format!("current_exe: {e}"))?
+        .to_string_lossy()
+        .into_owned();
+    let cfg_path = mcp_config_path(session_id)
+        .ok_or_else(|| "no cache dir available for MCP config".to_string())?;
+    let (listener, port) = mcp_listener::bind()
+        .await
+        .map_err(|e| format!("mcp bind: {e}"))?;
+    let token = mcp_listener::random_token();
+    write_mcp_config(&cfg_path, &exe, port, &token)
+        .map_err(|e| format!("write mcp config: {e}"))?;
+    let app_clone = app.clone();
+    let handle = tokio::spawn(async move {
+        mcp_listener::serve(app_clone, listener, token).await;
+    });
+    Ok((handle, cfg_path))
 }
 
 struct Inner {
@@ -102,6 +163,7 @@ async fn write_line(stdin: &Mutex<Option<ChildStdin>>, line: String) -> Result<(
 
 pub async fn start(
     state: &ClaudeCliState,
+    app: AppHandle,
     session_id: String,
     prompt: String,
     opts: SpawnOpts,
@@ -110,6 +172,18 @@ pub async fn start(
     if let Some(prev) = state.take(&session_id).await {
         prev.cancel.notify_one();
     }
+
+    let (mcp_listener_handle, mcp_config_file) = if opts.mcp_enabled() {
+        match build_mcp_for_session(&app, &session_id).await {
+            Ok(pair) => (Some(pair.0), Some(pair.1)),
+            Err(e) => {
+                log::warn!("claude-cli mcp setup failed: {e}; continuing without terax tools");
+                (None, None)
+            }
+        }
+    } else {
+        (None, None)
+    };
 
     let mut cmd = Command::new(binary(&opts));
     cmd.args([
@@ -132,8 +206,8 @@ pub async fn start(
     for dir in opts.add_dirs.iter().filter(|s| !s.is_empty()) {
         cmd.args(["--add-dir", dir]);
     }
-    if let Some(mcp) = opts.mcp_config_path.as_deref().filter(|s| !s.is_empty()) {
-        cmd.args(["--mcp-config", mcp]);
+    if let Some(ref mcp) = mcp_config_file {
+        cmd.args(["--mcp-config", &mcp.to_string_lossy()]);
     }
     if let Some(cwd) = opts.cwd.as_deref().filter(|s| !s.is_empty()) {
         cmd.current_dir(cwd);
@@ -251,6 +325,16 @@ pub async fn start(
             "code": code,
             "stderr_tail": stderr_tail,
         }));
+
+        // MCP cleanup. Aborting the listener is safe: it owns its TCP
+        // socket and any in-flight tool call short-circuits at the next
+        // I/O boundary.
+        if let Some(h) = mcp_listener_handle {
+            h.abort();
+        }
+        if let Some(p) = mcp_config_file {
+            let _ = std::fs::remove_file(&p);
+        }
 
         #[cfg(windows)]
         drop(job);

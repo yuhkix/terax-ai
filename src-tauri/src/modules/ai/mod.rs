@@ -1,8 +1,12 @@
-//! AI subprocess wrappers. Currently hosts the Claude Code CLI session
-//! manager and its IPC surface. MCP listener and helper land in a follow-up
-//! commit.
+//! AI subprocess wrappers. Hosts the Claude Code CLI session manager
+//! plus the MCP (Model Context Protocol) bridge that exposes a small
+//! set of terax-only tools to the CLI.
 
 pub mod claude_cli;
+pub mod mcp_helper;
+mod mcp_listener;
+mod mcp_protocol;
+mod mcp_tools;
 
 use serde_json::Value;
 use tauri::ipc::Channel;
@@ -11,13 +15,14 @@ pub use claude_cli::ClaudeCliState;
 
 #[tauri::command]
 pub async fn ai_claude_cli_start(
+    app: tauri::AppHandle,
     state: tauri::State<'_, ClaudeCliState>,
     session_id: String,
     prompt: String,
     opts: claude_cli::SpawnOpts,
     channel: Channel<Value>,
 ) -> Result<(), String> {
-    claude_cli::start(&state, session_id, prompt, opts, channel).await
+    claude_cli::start(&state, app, session_id, prompt, opts, channel).await
 }
 
 #[tauri::command]
