@@ -51,6 +51,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useMemo, useState } from "react";
+import { ClaudeCliProviderCard } from "../components/ClaudeCliProviderCard";
 import { ProviderIcon } from "../components/ProviderIcon";
 import { ProviderKeyCard } from "../components/ProviderKeyCard";
 import { SectionHeader } from "../components/SectionHeader";
@@ -193,6 +194,9 @@ export function ModelsSection() {
   };
 
   const isConfigured = (id: ProviderId): boolean => {
+    // Claude Code (CLI) is always available; auth lives in the local
+    // `claude` binary and an empty binary-path falls back to PATH lookup.
+    if (id === "claude-cli") return true;
     if (id === "openrouter")
       return !!keys?.[id] && !!openrouterModelId.trim();
     if (!isLocalProvider(id)) return !!keys?.[id];
@@ -273,24 +277,28 @@ export function ModelsSection() {
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {visibleProviders.map((p) =>
-              isLocalProvider(p.id) || p.id === "openrouter" ? (
-                <LocalProviderCard
-                  key={p.id}
-                  provider={p}
-                  configured={configuredIds.has(p.id)}
-                  config={localConfig(p.id)!}
-                  meta={LOCAL_META[p.id]!}
-                  compatKey={
-                    p.id === "openai-compatible" || p.id === "openrouter"
-                      ? keys[p.id]
-                      : undefined
-                  }
-                  onSaveKey={(v) => onSaveKey(p.id, v)}
-                  onClearKey={() => onClearKey(p.id)}
-                  onRemove={() => removeProvider(p.id)}
-                />
-              ) : (
+            {visibleProviders.map((p) => {
+              if (p.id === "claude-cli") return <ClaudeCliProviderCard key={p.id} />;
+              if (isLocalProvider(p.id) || p.id === "openrouter") {
+                return (
+                  <LocalProviderCard
+                    key={p.id}
+                    provider={p}
+                    configured={configuredIds.has(p.id)}
+                    config={localConfig(p.id)!}
+                    meta={LOCAL_META[p.id]!}
+                    compatKey={
+                      p.id === "openai-compatible" || p.id === "openrouter"
+                        ? keys[p.id]
+                        : undefined
+                    }
+                    onSaveKey={(v) => onSaveKey(p.id, v)}
+                    onClearKey={() => onClearKey(p.id)}
+                    onRemove={() => removeProvider(p.id)}
+                  />
+                );
+              }
+              return (
                 <ProviderKeyCard
                   key={p.id}
                   provider={p}
@@ -299,8 +307,8 @@ export function ModelsSection() {
                   onClear={() => onClearKey(p.id)}
                   onRemove={() => removeProvider(p.id)}
                 />
-              ),
-            )}
+              );
+            })}
           </div>
         )}
       </div>
