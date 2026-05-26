@@ -1,6 +1,6 @@
 mod modules;
 
-use modules::{agent, fs, git, net, pty, secrets, shell, workspace};
+use modules::{agent, ai, fs, git, net, pty, secrets, shell, workspace};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_window_state::StateFlags;
@@ -113,6 +113,7 @@ pub fn run() {
         .manage(shell::ShellState::default())
         .manage(secrets::SecretsState::default())
         .manage(fs::watch::FsWatchState::default())
+        .manage(ai::ClaudeCliState::default())
         .manage({
             let registry = workspace::WorkspaceRegistry::default();
             workspace::bootstrap_registry(&registry);
@@ -185,6 +186,10 @@ pub fn run() {
             net::lm_ping,
             net::ai_http_request,
             net::ai_http_stream,
+            ai::ai_claude_cli_start,
+            ai::ai_claude_cli_steer,
+            ai::ai_claude_cli_approve,
+            ai::ai_claude_cli_stop,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
