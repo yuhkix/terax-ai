@@ -1,6 +1,8 @@
 pub mod agent;
 pub mod fs;
 pub mod git;
+#[cfg(windows)]
+pub mod job;
 pub mod net;
 pub mod proc;
 pub mod pty;

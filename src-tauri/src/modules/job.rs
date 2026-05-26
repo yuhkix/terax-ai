@@ -1,6 +1,7 @@
-//! Windows Job Object with KILL_ON_JOB_CLOSE for ConPTY children.
-//! Dropping the handle kills the whole tree — only reliable orphan guard
-//! on Windows.
+//! Windows Job Object with KILL_ON_JOB_CLOSE for child processes.
+//! Dropping the handle kills the whole tree; only reliable orphan guard
+//! on Windows. Used by PTY sessions and by long-lived subprocess wrappers
+//! (e.g. the Claude Code CLI session).
 
 #![cfg(windows)]
 
