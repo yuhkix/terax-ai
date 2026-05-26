@@ -23,6 +23,7 @@ export const EMPTY_PROVIDER_KEYS: ProviderKeys = {
   lmstudio: null,
   mlx: null,
   ollama: null,
+  "claude-cli": null,
 };
 
 export async function getKey(provider: ProviderId): Promise<string | null> {

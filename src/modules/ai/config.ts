@@ -13,7 +13,8 @@ export type ProviderId =
   | "openai-compatible"
   | "lmstudio"
   | "mlx"
-  | "ollama";
+  | "ollama"
+  | "claude-cli";
 
 export type ProviderInfo = {
   id: ProviderId;
@@ -117,6 +118,13 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     keyringAccount: "",
     keyPrefix: null,
     consoleUrl: "https://ollama.com/download",
+  },
+  {
+    id: "claude-cli",
+    label: "Claude Code (CLI)",
+    keyringAccount: "",
+    keyPrefix: null,
+    consoleUrl: "https://docs.anthropic.com/en/docs/claude-code",
   },
 ] as const;
 
@@ -485,6 +493,44 @@ export const MODELS = [
     description: "Local models via Ollama.",
     capabilities: { intelligence: 3, speed: 3, cost: 5 },
   },
+
+  // ── Claude Code CLI (subscription auth via local `claude` binary) ─────────
+  {
+    id: "claude-cli-opus-4-7",
+    provider: "claude-cli",
+    label: "Claude Code · Opus 4.7",
+    hint: "via CLI",
+    description: "Anthropic Opus 4.7 via the local Claude Code CLI. No API key needed.",
+    capabilities: { intelligence: 5, speed: 2, cost: 5 },
+    tags: ["vision", "reasoning", "tools", "coding"],
+  },
+  {
+    id: "claude-cli-opus-4-7-1m",
+    provider: "claude-cli",
+    label: "Claude Code · Opus 4.7 (1M)",
+    hint: "1M ctx",
+    description: "Opus 4.7 with 1M context window via the Claude Code CLI.",
+    capabilities: { intelligence: 5, speed: 2, cost: 5 },
+    tags: ["vision", "reasoning", "tools", "coding"],
+  },
+  {
+    id: "claude-cli-sonnet-4-6",
+    provider: "claude-cli",
+    label: "Claude Code · Sonnet 4.6",
+    hint: "via CLI",
+    description: "Anthropic Sonnet 4.6 via the local Claude Code CLI. No API key needed.",
+    capabilities: { intelligence: 4, speed: 4, cost: 5 },
+    tags: ["vision", "tools", "coding"],
+  },
+  {
+    id: "claude-cli-haiku-4-5",
+    provider: "claude-cli",
+    label: "Claude Code · Haiku 4.5",
+    hint: "via CLI",
+    description: "Anthropic Haiku 4.5 via the local Claude Code CLI. No API key needed.",
+    capabilities: { intelligence: 3, speed: 5, cost: 5 },
+    tags: ["vision", "tools"],
+  },
 ] as const satisfies readonly ModelInfo[];
 
 export type ModelId = (typeof MODELS)[number]["id"];
@@ -554,6 +600,10 @@ export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   "mistral-large-latest": 131_072,
   "mistral-medium-latest": 32_768,
   "codestral-latest": 256_000,
+  "claude-cli-opus-4-7": 200_000,
+  "claude-cli-opus-4-7-1m": 1_000_000,
+  "claude-cli-sonnet-4-6": 200_000,
+  "claude-cli-haiku-4-5": 200_000,
 };
 
 export function getModelContextLimit(
@@ -617,6 +667,7 @@ export const KEYLESS_PROVIDERS: readonly ProviderId[] = [
   "mlx",
   "ollama",
   "openai-compatible",
+  "claude-cli",
 ] as const;
 
 export function providerNeedsKey(id: ProviderId): boolean {
@@ -652,7 +703,10 @@ export const DEFAULT_AUTOCOMPLETE_MODEL: Partial<Record<ProviderId, string>> = {
 /** Curated list of fast models suitable for inline completion (speed ≥ 4). */
 export function getAutocompleteEligibleModels(): readonly ModelInfo[] {
   return MODELS.filter(
-    (m) => m.capabilities.speed >= 4 && m.id !== "openai-compatible-custom",
+    (m) =>
+      m.capabilities.speed >= 4 &&
+      m.id !== "openai-compatible-custom" &&
+      m.provider !== "claude-cli",
   );
 }
 

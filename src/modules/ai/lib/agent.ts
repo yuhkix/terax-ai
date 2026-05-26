@@ -203,6 +203,14 @@ export async function buildLanguageModel(
       })(resolvedModelId);
       break;
     }
+    case "claude-cli": {
+      // chatStore branches to createClaudeCliTransport for this provider, so
+      // runAgentStream is never reached. If we got here, something upstream
+      // skipped the branch.
+      throw new Error(
+        "Claude Code CLI provider routes through claudeCliTransport, not buildLanguageModel.",
+      );
+    }
     default: {
       const _exhaustive: never = provider;
       throw new Error(`Unsupported provider: ${_exhaustive as ProviderId}`);
