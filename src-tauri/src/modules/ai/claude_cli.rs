@@ -50,13 +50,8 @@ fn mcp_config_path(session_id: &str) -> Option<PathBuf> {
     Some(dir.join(format!("{session_id}.json")))
 }
 
-fn write_mcp_config(
-    path: &PathBuf,
-    binary_path: &str,
-    port: u16,
-    token: &str,
-) -> std::io::Result<()> {
-    let cfg = json!({
+fn build_mcp_config(binary_path: &str, port: u16, token: &str) -> Value {
+    json!({
         "mcpServers": {
             "terax": {
                 "command": binary_path,
@@ -67,7 +62,16 @@ fn write_mcp_config(
                 }
             }
         }
-    });
+    })
+}
+
+fn write_mcp_config(
+    path: &PathBuf,
+    binary_path: &str,
+    port: u16,
+    token: &str,
+) -> std::io::Result<()> {
+    let cfg = build_mcp_config(binary_path, port, token);
     std::fs::write(path, serde_json::to_vec_pretty(&cfg)?)
 }
 
@@ -396,6 +400,15 @@ mod tests {
         assert_eq!(v["type"], "permission_decision");
         assert_eq!(v["tool_use_id"], "tool_abc");
         assert_eq!(v["approved"], true);
+    }
+
+    #[test]
+    fn mcp_config_shape() {
+        let v = build_mcp_config("/usr/bin/terax", 54321, "tok-abc");
+        assert_eq!(v["mcpServers"]["terax"]["command"], "/usr/bin/terax");
+        assert_eq!(v["mcpServers"]["terax"]["args"][0], "--mcp-stdio");
+        assert_eq!(v["mcpServers"]["terax"]["env"]["TERAX_MCP_PORT"], "54321");
+        assert_eq!(v["mcpServers"]["terax"]["env"]["TERAX_MCP_TOKEN"], "tok-abc");
     }
 
     #[test]
