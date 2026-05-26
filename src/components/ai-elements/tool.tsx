@@ -33,6 +33,7 @@ import { isValidElement, memo, useState } from "react";
 export type ToolPart = ToolUIPart | DynamicToolUIPart;
 
 const TOOL_META: Record<string, { label: string; icon: typeof File01Icon }> = {
+  // Terax MCP tools (snake_case)
   read_file: { label: "Read", icon: File01Icon },
   list_directory: { label: "List", icon: FolderOpenIcon },
   write_file: { label: "Write", icon: FilePlusIcon },
@@ -50,6 +51,28 @@ const TOOL_META: Record<string, { label: string; icon: typeof File01Icon }> = {
   open_preview: { label: "Preview", icon: EyeIcon },
   run_subagent: { label: "Subagent", icon: RobotIcon },
   todo_write: { label: "Todos", icon: CheckListIcon },
+  // Claude Code CLI built-ins (PascalCase)
+  Read: { label: "Read", icon: File01Icon },
+  Write: { label: "Write", icon: FilePlusIcon },
+  Edit: { label: "Edit", icon: FileEditIcon },
+  MultiEdit: { label: "Edit", icon: Edit02Icon },
+  NotebookEdit: { label: "Edit notebook", icon: FileEditIcon },
+  Bash: { label: "Run", icon: TerminalIcon },
+  BashOutput: { label: "Logs", icon: TerminalIcon },
+  KillShell: { label: "Kill", icon: TerminalIcon },
+  Glob: { label: "Glob", icon: Folder01Icon },
+  Grep: { label: "Search", icon: GlobalSearchIcon },
+  LS: { label: "List", icon: FolderOpenIcon },
+  WebFetch: { label: "Fetch", icon: GlobalSearchIcon },
+  WebSearch: { label: "Search web", icon: GlobalSearchIcon },
+  TodoWrite: { label: "Todos", icon: CheckListIcon },
+  Task: { label: "Subagent", icon: RobotIcon },
+  Agent: { label: "Subagent", icon: RobotIcon },
+  Skill: { label: "Skill", icon: SparklesIcon },
+  SlashCommand: { label: "Command", icon: SparklesIcon },
+  AskUserQuestion: { label: "Ask user", icon: SparklesIcon },
+  ExitPlanMode: { label: "Exit plan", icon: SparklesIcon },
+  ToolSearch: { label: "Tool search", icon: GlobalSearchIcon },
 };
 
 const STATUS_DOT: Record<ToolPart["state"], string> = {
@@ -77,6 +100,8 @@ function deriveSummary(toolName: string, input: unknown): string | null {
   const i = input as Record<string, unknown>;
   const str = (k: string) =>
     typeof i[k] === "string" ? (i[k] as string) : null;
+  // Claude CLI tools use file_path; Terax MCP tools use path.
+  const filePath = () => str("file_path") ?? str("path");
 
   switch (toolName) {
     case "read_file":
@@ -86,28 +111,64 @@ function deriveSummary(toolName: string, input: unknown): string | null {
     case "create_directory":
     case "list_directory":
       return str("path");
+    case "Read":
+    case "Write":
+    case "Edit":
+    case "MultiEdit":
+    case "NotebookEdit":
+      return filePath();
+    case "LS":
+      return str("path");
     case "bash_run":
     case "bash_background":
+    case "Bash":
       return str("command");
+    case "BashOutput":
+      return str("bash_id");
+    case "KillShell":
+      return str("shell_id");
     case "bash_logs":
     case "bash_kill":
       return str("id");
     case "grep":
+    case "Grep":
       return str("pattern") ?? str("query");
     case "glob":
+    case "Glob":
       return str("pattern");
+    case "WebFetch":
+      return str("url");
+    case "WebSearch":
+      return str("query");
+    case "Task":
+    case "Agent":
+      return str("description") ?? str("subagent_type");
+    case "Skill":
+      return str("skill");
+    case "SlashCommand":
+      return str("command");
+    case "ToolSearch":
+      return str("query");
     case "suggest_command":
       return str("intent") ?? str("description");
     case "open_preview":
       return str("path") ?? str("url");
     case "run_subagent":
       return str("agent") ?? str("task");
-    case "todo_write": {
+    case "todo_write":
+    case "TodoWrite": {
       const items = Array.isArray(i.todos) ? i.todos : null;
       return items
         ? `${items.length} item${items.length === 1 ? "" : "s"}`
         : null;
     }
+    case "AskUserQuestion": {
+      const qs = Array.isArray(i.questions) ? i.questions : null;
+      const first = qs?.[0] as { question?: string } | undefined;
+      return first?.question ?? null;
+    }
+    case "ExitPlanMode":
+      return "plan ready";
     default:
       return null;
   }
@@ -132,6 +193,14 @@ const HEAVY_CONTENT_TOOLS = new Set([
   "multi_edit",
   "run_subagent",
   "todo_write",
+  "Write",
+  "Edit",
+  "MultiEdit",
+  "NotebookEdit",
+  "TodoWrite",
+  "Task",
+  "Agent",
+  "ExitPlanMode",
 ]);
 
 const ToolImpl = ({
@@ -270,12 +339,16 @@ function renderInputPreview(
   const str = (k: string) =>
     typeof i[k] === "string" ? (i[k] as string) : null;
 
-  if (toolName === "bash_run" || toolName === "bash_background") {
+  if (toolName === "bash_run" || toolName === "bash_background" || toolName === "Bash") {
     const cmd = str("command");
     const cwd = str("cwd");
+    const description = str("description");
     if (!cmd) return null;
     return (
       <div className="space-y-1">
+        {description ? (
+          <div className="text-[10.5px] text-muted-foreground">{description}</div>
+        ) : null}
         {cwd ? (
           <div className="font-mono text-[10px] text-muted-foreground">
             {cwd}
@@ -291,23 +364,86 @@ function renderInputPreview(
     toolName === "read_file" ||
     toolName === "list_directory" ||
     toolName === "create_directory" ||
-    toolName === "open_preview"
+    toolName === "open_preview" ||
+    toolName === "Read" ||
+    toolName === "LS"
   ) {
-    const path = str("path") ?? str("url");
+    const path = str("file_path") ?? str("path") ?? str("url");
     if (!path) return null;
+    const offset = typeof i.offset === "number" ? i.offset : null;
+    const limit = typeof i.limit === "number" ? i.limit : null;
     return (
-      <div className="font-mono text-[11px] text-muted-foreground">{path}</div>
+      <div className="space-y-0.5">
+        <div className="font-mono text-[11px] text-muted-foreground">{path}</div>
+        {offset != null || limit != null ? (
+          <div className="font-mono text-[10px] text-muted-foreground/80">
+            {offset != null ? `offset ${offset}` : ""}
+            {offset != null && limit != null ? " · " : ""}
+            {limit != null ? `limit ${limit}` : ""}
+          </div>
+        ) : null}
+      </div>
     );
   }
-  if (toolName === "grep") {
+  if (toolName === "grep" || toolName === "Grep") {
     const pat = str("pattern") ?? str("query");
     const path = str("path") ?? str("root");
+    const glob = str("glob");
+    const type = str("type");
+    if (!pat) return null;
+    return (
+      <div className="space-y-0.5 font-mono text-[11px]">
+        <div className="text-foreground">{pat}</div>
+        {(path || glob || type) ? (
+          <div className="text-muted-foreground">
+            {[path, glob, type].filter(Boolean).join(" · ")}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+  if (toolName === "Glob" || toolName === "glob") {
+    const pat = str("pattern");
+    const path = str("path");
     if (!pat) return null;
     return (
       <div className="space-y-0.5 font-mono text-[11px]">
         <div className="text-foreground">{pat}</div>
         {path ? <div className="text-muted-foreground">{path}</div> : null}
       </div>
+    );
+  }
+  if (toolName === "WebFetch" || toolName === "WebSearch") {
+    const primary = str("url") ?? str("query");
+    const prompt = str("prompt");
+    if (!primary) return null;
+    return (
+      <div className="space-y-1">
+        <div className="font-mono text-[11px] text-foreground break-all">{primary}</div>
+        {prompt ? (
+          <div className="text-[11px] text-muted-foreground">{prompt}</div>
+        ) : null}
+      </div>
+    );
+  }
+  if (toolName === "Skill") {
+    const skill = str("skill");
+    const args = str("args");
+    if (!skill) return null;
+    return (
+      <div className="space-y-0.5 font-mono text-[11px]">
+        <div className="text-foreground">/{skill}</div>
+        {args ? <div className="text-muted-foreground">{args}</div> : null}
+      </div>
+    );
+  }
+  if (toolName === "SlashCommand") {
+    const cmd = str("command");
+    if (!cmd) return null;
+    return (
+      <pre className="overflow-auto rounded bg-muted/40 p-2 font-mono text-[11px] leading-relaxed">
+        {cmd}
+      </pre>
     );
   }
   return null;
@@ -359,6 +495,65 @@ function ToolOutput({
 }
 
 function renderToolOutput(toolName: string, output: unknown): ReactNode | null {
+  // Claude CLI emits tool results as plain strings (file body, command stdout).
+  // Show those compactly with a per-tool framing line so the user sees what
+  // happened at a glance instead of a wall of JSON.
+  if (typeof output === "string") {
+    if (toolName === "Read") {
+      const lines = output ? output.split("\n").length : 0;
+      return (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 font-mono text-[11px]">
+            <span className="text-emerald-600 dark:text-emerald-400">✓</span>
+            <span className="text-foreground">read</span>
+            <span className="text-muted-foreground">
+              ({lines} line{lines === 1 ? "" : "s"})
+            </span>
+          </div>
+          <CodeBlockMini code={output} language="text" />
+        </div>
+      );
+    }
+    if (toolName === "Bash" || toolName === "BashOutput") {
+      return (
+        <div className="space-y-1">
+          <div className="text-[10px] font-medium text-muted-foreground">Output</div>
+          <pre className="max-h-72 overflow-auto rounded bg-muted/40 p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
+            {output || " "}
+          </pre>
+        </div>
+      );
+    }
+    if (toolName === "Write" || toolName === "Edit" || toolName === "MultiEdit") {
+      return (
+        <div className="flex items-center gap-1.5 font-mono text-[11px]">
+          <span className="text-emerald-600 dark:text-emerald-400">✓</span>
+          <span className="text-foreground">{output.split("\n")[0] || "done"}</span>
+        </div>
+      );
+    }
+    if (toolName === "Glob" || toolName === "Grep") {
+      const lines = output.split("\n").filter(Boolean);
+      if (lines.length === 0) {
+        return (
+          <div className="text-[11px] italic text-muted-foreground">no matches</div>
+        );
+      }
+      return (
+        <div className="max-h-72 overflow-auto rounded bg-muted/30 p-2 font-mono text-[11px]">
+          {lines.slice(0, 200).map((line, idx) => (
+            <div key={idx} className="truncate text-foreground">
+              {line}
+            </div>
+          ))}
+        </div>
+      );
+    }
+    if (toolName === "WebFetch" || toolName === "WebSearch") {
+      return <CodeBlockMini code={output} language="text" />;
+    }
+  }
+
   if (!output || typeof output !== "object") return null;
   const o = output as Record<string, unknown>;
 

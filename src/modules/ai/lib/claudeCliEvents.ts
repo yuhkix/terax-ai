@@ -4,6 +4,7 @@ export type Side =
   | { kind: "permission_request"; toolUseId: string; toolName: string; input: Record<string, unknown>; description?: string }
   | { kind: "claude_session_id"; id: string }
   | { kind: "compact" }
+  | { kind: "complete"; subtype: string | null }
   | { kind: "exit"; code: number; stderrTail: string };
 
 export type TranslateResult = {
@@ -336,6 +337,10 @@ export class ClaudeCliEventTranslator {
     const resultText = getString(event, "result") ?? getString(event, "text");
     if (resultText && !this.textId) this.emitText(resultText, out);
     this.agentStack = [];
+    // Top-level `result` event = end of this turn. The CLI is now idle on
+    // stdin waiting for more input. Signal the transport so it can stop the
+    // session (closing stdin lets the process exit cleanly).
+    out.sides.push({ kind: "complete", subtype: subtype ?? null });
   }
 
   private handlePermissionRequest(event: ClaudeEvent, out: TranslateResult): void {

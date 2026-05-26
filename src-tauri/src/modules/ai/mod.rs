@@ -52,3 +52,21 @@ pub async fn ai_claude_cli_stop(
     claude_cli::stop(&state, &session_id).await;
     Ok(())
 }
+
+#[tauri::command]
+pub async fn ai_claude_cli_tool_result(
+    state: tauri::State<'_, ClaudeCliState>,
+    session_id: String,
+    tool_use_id: String,
+    content: String,
+    is_error: Option<bool>,
+) -> Result<(), String> {
+    claude_cli::tool_result(
+        &state,
+        &session_id,
+        &tool_use_id,
+        &content,
+        is_error.unwrap_or(false),
+    )
+    .await
+}

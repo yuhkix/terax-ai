@@ -42,6 +42,7 @@ import type {
 } from "ai";
 import { memo, useCallback, useMemo } from "react";
 import { AiToolApproval } from "./AiToolApproval";
+import { AskUserQuestionCard } from "./AskUserQuestionCard";
 
 function CommandSnippet({ name }: { name: string }) {
   const meta = SLASH_COMMANDS[name];
@@ -652,6 +653,29 @@ const RenderedTool = memo(function RenderedTool({
         part={part as Extract<ToolUIPart, { state: "approval-requested" }>}
         toolName={toolName}
         onRespond={(approved) => onApproval(part.approval.id, approved)}
+      />
+    );
+  }
+
+  // AskUserQuestion is interactive — render the question card whether the
+  // model is still waiting (input-available) or the user has already
+  // responded (output-available, in which case the card shows the chosen
+  // answers read-only).
+  if (
+    toolName === "AskUserQuestion" &&
+    (part.state === "input-available" || part.state === "output-available") &&
+    part.input &&
+    typeof part.input === "object"
+  ) {
+    const toolUseId =
+      part.type === "dynamic-tool"
+        ? part.toolCallId
+        : (part as { toolCallId?: string }).toolCallId ?? "";
+    return (
+      <AskUserQuestionCard
+        toolUseId={toolUseId}
+        input={part.input as Record<string, unknown>}
+        output={"output" in part ? part.output : undefined}
       />
     );
   }

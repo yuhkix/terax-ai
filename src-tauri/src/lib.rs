@@ -191,6 +191,7 @@ pub fn run() {
             ai::ai_claude_cli_steer,
             ai::ai_claude_cli_approve,
             ai::ai_claude_cli_stop,
+            ai::ai_claude_cli_tool_result,
             discord::discord_update_activity,
             discord::discord_clear_activity,
             discord::discord_invite_url,

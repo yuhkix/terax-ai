@@ -163,6 +163,27 @@ fn permission_decision(tool_use_id: &str, approved: bool) -> String {
     .to_string()
 }
 
+fn tool_result_message(tool_use_id: &str, content: &str, is_error: bool) -> String {
+    // stream-json shape for handing a tool result back to the CLI. Used for
+    // interactive tools like AskUserQuestion where the model is paused
+    // waiting on a host-side response.
+    json!({
+        "type": "user",
+        "message": {
+            "role": "user",
+            "content": [{
+                "type": "tool_result",
+                "tool_use_id": tool_use_id,
+                "content": content,
+                "is_error": is_error,
+            }]
+        },
+        "parent_tool_use_id": null,
+        "session_id": null,
+    })
+    .to_string()
+}
+
 async fn write_line(stdin: &Mutex<Option<ChildStdin>>, line: String) -> Result<(), String> {
     let mut guard = stdin.lock().await;
     let Some(w) = guard.as_mut() else {
@@ -272,6 +293,10 @@ pub async fn start(
     state.insert(session_id.clone(), inner.clone()).await;
 
     write_line(&inner.stdin, user_message(&prompt)).await?;
+    // stdin stays open so steer() / approve() / AskUserQuestion responses
+    // can be written. End-of-turn is detected on the frontend via the
+    // top-level `result` event in stdout; the transport then calls
+    // ai_claude_cli_stop, which closes stdin here and lets the CLI exit.
 
     let drive_inner = inner;
     tokio::spawn(async move {
@@ -388,6 +413,24 @@ pub async fn approve(
         .await
         .ok_or("no active Claude CLI session")?;
     write_line(&inner.stdin, permission_decision(tool_use_id, approved)).await
+}
+
+pub async fn tool_result(
+    state: &ClaudeCliState,
+    session_id: &str,
+    tool_use_id: &str,
+    content: &str,
+    is_error: bool,
+) -> Result<(), String> {
+    let inner = state
+        .get(session_id)
+        .await
+        .ok_or("no active Claude CLI session")?;
+    write_line(
+        &inner.stdin,
+        tool_result_message(tool_use_id, content, is_error),
+    )
+    .await
 }
 
 pub async fn stop(state: &ClaudeCliState, session_id: &str) {

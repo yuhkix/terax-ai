@@ -214,9 +214,11 @@ async function runOne(
         const { chunks, sides } = translator.process(event);
         for (const chunk of chunks) writer.write(chunk);
         for (const side of sides) {
-          if (side.kind === "exit") {
+          if (side.kind === "exit" || side.kind === "complete") {
             sidesAcc.push(side);
-            staleSession = isStaleSession(side.stderrTail);
+            if (side.kind === "exit") {
+              staleSession = isStaleSession(side.stderrTail);
+            }
             finished = true;
             if (resolveExit) {
               resolveExit(sidesAcc.slice());
@@ -254,13 +256,25 @@ async function runOne(
         return;
       }
 
-      await new Promise<Side[]>((resolve) => {
+      const finalSides = await new Promise<Side[]>((resolve) => {
         if (finished) {
           resolve(sidesAcc.slice());
           return;
         }
         resolveExit = resolve;
       });
+
+      // If we resolved on `complete` (turn done, CLI still idle on stdin),
+      // tell Rust to drop stdin so the process exits. On a real exit side
+      // this is a no-op.
+      const sawComplete = finalSides.some((s) => s.kind === "complete");
+      if (sawComplete) {
+        try {
+          await invoke("ai_claude_cli_stop", { sessionId });
+        } catch {
+          // best-effort
+        }
+      }
 
       // Resume retry: a stale --resume id manifests as a CLI exit with a
       // recognizable stderr message. Clear the stored id and replay once.
