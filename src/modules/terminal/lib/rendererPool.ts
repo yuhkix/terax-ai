@@ -295,6 +295,18 @@ export function acquireSlot(params: AcquireParams): Slot {
 }
 
 function bindSlot(slot: Slot, p: AcquireParams): void {
+  // Defer if the container hasn't been laid out yet — fit() would otherwise
+  // measure 0 px and size the term (and the PTY) to ~1 col/row, leaving the
+  // terminal apparently empty until the next resize. Manifests as the shell
+  // starting but no prompt rendering on first paint / HMR remount.
+  if (p.container.clientWidth === 0 || p.container.clientHeight === 0) {
+    requestAnimationFrame(() => {
+      if (slot.currentLeafId !== null && slot.currentLeafId !== p.leafId) return;
+      bindSlot(slot, p);
+    });
+    return;
+  }
+
   const stale =
     !slot.webglAddon || performance.now() - slot.lastUsedAt > SLOT_STALE_MS;
   slot.currentLeafId = p.leafId;
@@ -306,6 +318,13 @@ function bindSlot(slot: Slot, p: AcquireParams): void {
   if (slot.host.parentNode !== p.container) {
     p.container.appendChild(slot.host);
   }
+  console.info("[terax-pty] bind", {
+    leafId: p.leafId,
+    w: p.container.clientWidth,
+    h: p.container.clientHeight,
+    cols: p.cols,
+    rows: p.rows,
+  });
 
   slot.term.options.disableStdin = p.shellExited;
   slot.term.clear();
