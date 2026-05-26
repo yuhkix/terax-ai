@@ -417,7 +417,10 @@ export default function App() {
     (ollamaBaseURL.trim().length > 0 && ollamaModelId.trim().length > 0) ||
     (openaiCompatibleBaseURL.trim().length > 0 &&
       openaiCompatibleModelId.trim().length > 0);
-  const hasComposer = hasAnyKey(apiKeys) || hasLocalModel;
+  // claude-cli auth lives in the local `claude` binary, not in any config
+  // we track, so the provider is always considered available for the composer.
+  const hasClaudeCli = true;
+  const hasComposer = hasAnyKey(apiKeys) || hasLocalModel || hasClaudeCli;
 
   const [keysLoaded, setKeysLoaded] = useState(false);
   useEffect(() => {
