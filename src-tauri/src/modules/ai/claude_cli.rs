@@ -35,11 +35,20 @@ pub struct SpawnOpts {
     pub resume_claude_session_id: Option<String>,
     pub binary_path: Option<String>,
     pub enable_mcp: Option<bool>,
+    pub skip_permissions: Option<bool>,
 }
 
 impl SpawnOpts {
     fn mcp_enabled(&self) -> bool {
         self.enable_mcp.unwrap_or(true)
+    }
+
+    fn skip_permissions(&self) -> bool {
+        // v1 default: skip claude's permission prompts. Without this,
+        // claude's stream-json mode blocks waiting for a permission
+        // decision schema we don't yet match 1:1 (open question in the
+        // spec). Surface as a setting later for the strict-deny-list path.
+        self.skip_permissions.unwrap_or(true)
     }
 }
 
@@ -190,15 +199,13 @@ pub async fn start(
     };
 
     let mut cmd = Command::new(binary(&opts));
-    cmd.args([
-        "-p",
-        "--input-format",
-        "stream-json",
-        "--output-format",
-        "stream-json",
-    ]);
-    if let Some(model) = opts.model_arg.as_deref().filter(|s| !s.is_empty()) {
-        cmd.args(["--model", model]);
+    // Argument order mirrors clauke's known-good invocation:
+    //   --output-format / --verbose first, then permission/resume/dir flags,
+    //   then -p --input-format, then --model. The CLI's argparse is lenient
+    //   but staying close to a tested order avoids edge-case regressions.
+    cmd.args(["--output-format", "stream-json", "--verbose"]);
+    if opts.skip_permissions() {
+        cmd.arg("--dangerously-skip-permissions");
     }
     if let Some(resume) = opts
         .resume_claude_session_id
@@ -212,6 +219,10 @@ pub async fn start(
     }
     if let Some(ref mcp) = mcp_config_file {
         cmd.args(["--mcp-config", &mcp.to_string_lossy()]);
+    }
+    cmd.args(["-p", "--input-format", "stream-json"]);
+    if let Some(model) = opts.model_arg.as_deref().filter(|s| !s.is_empty()) {
+        cmd.args(["--model", model]);
     }
     if let Some(cwd) = opts.cwd.as_deref().filter(|s| !s.is_empty()) {
         cmd.current_dir(cwd);
