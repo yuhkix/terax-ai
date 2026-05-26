@@ -1,6 +1,7 @@
 import { useChat, type UIMessage } from "@ai-sdk/react";
 import type { ToolUIPart, UIMessagePart } from "ai";
 import { useEffect, useMemo, useRef } from "react";
+import { tryRespondClaudeCli } from "../lib/claudeCliApproval";
 import { native } from "../lib/native";
 import { checkReadable } from "../lib/security";
 import { resolvePath } from "../tools/tools";
@@ -70,10 +71,15 @@ function Bridge({
 
   // Expose the approval responder so the diff tab can resolve approvals.
   // We keep it in a ref-stable closure so identity is stable per render.
+  // claude-cli approvals route through the CLI's stdin via tryRespondClaudeCli
+  // and never reach AI SDK's tool-approval-response path.
   useEffect(() => {
-    setApprovalResponder((id, approved) =>
-      addToolApprovalResponse({ id, approved }),
-    );
+    setApprovalResponder((id, approved) => {
+      void (async () => {
+        if (await tryRespondClaudeCli(id, approved)) return;
+        addToolApprovalResponse({ id, approved });
+      })();
+    });
     return () => setApprovalResponder(null);
   }, [setApprovalResponder, addToolApprovalResponse]);
 

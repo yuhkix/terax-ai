@@ -5,6 +5,12 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from "ai";
+import {
+  approveDirectly,
+  checkClaudeToolDenyList,
+  nextApprovalId,
+  registerClaudeCliApproval,
+} from "./claudeCliApproval";
 import { ClaudeCliEventTranslator, type Side } from "./claudeCliEvents";
 
 const CLI_MODEL_ARG: Record<string, string> = {
@@ -33,13 +39,6 @@ export type ClaudeCliDeps = {
   getClaudeSessionId: (sessionId: string) => string | undefined;
   setClaudeSessionId: (sessionId: string, claudeId: string) => void;
   clearClaudeSessionId: (sessionId: string) => void;
-  onPermissionRequest: (info: {
-    sessionId: string;
-    toolUseId: string;
-    toolName: string;
-    input: Record<string, unknown>;
-    description?: string;
-  }) => void;
   onCompact?: () => void;
   onStep?: (label: string | null) => void;
 };
@@ -84,6 +83,48 @@ function dedupAddDirs(workspaceRoot: string | null, extras: string[]): string[] 
 function isStaleSession(stderrTail: string): boolean {
   const t = stderrTail.toLowerCase();
   return t.includes("session not found") || t.includes("session id") && t.includes("invalid");
+}
+
+function handlePermissionRequest(
+  sessionId: string,
+  side: Extract<Side, { kind: "permission_request" }>,
+  writer: { write: (chunk: UIMessageChunk) => void },
+): void {
+  // Surface a complete tool input first so the existing AiToolApproval card
+  // has something to attach itself to. The Claude CLI emits the matching
+  // tool_use block only after approval lands, so we synthesize it here.
+  writer.write({
+    type: "tool-input-start",
+    toolCallId: side.toolUseId,
+    toolName: side.toolName,
+    dynamic: true,
+  });
+  writer.write({
+    type: "tool-input-available",
+    toolCallId: side.toolUseId,
+    toolName: side.toolName,
+    input: side.input,
+    dynamic: true,
+  });
+
+  const verdict = checkClaudeToolDenyList(side.toolName, side.input);
+  if (verdict.denied) {
+    writer.write({
+      type: "tool-output-error",
+      toolCallId: side.toolUseId,
+      errorText: `terax blocked: ${verdict.reason}`,
+    });
+    void approveDirectly(sessionId, side.toolUseId, false);
+    return;
+  }
+
+  const approvalId = nextApprovalId();
+  registerClaudeCliApproval(approvalId, sessionId, side.toolUseId);
+  writer.write({
+    type: "tool-approval-request",
+    approvalId,
+    toolCallId: side.toolUseId,
+  });
 }
 
 export function createClaudeCliTransport(deps: ClaudeCliDeps): ChatTransport<UIMessage> {
@@ -144,13 +185,7 @@ async function runOne(
           if (side.kind === "claude_session_id") {
             deps.setClaudeSessionId(sessionId, side.id);
           } else if (side.kind === "permission_request") {
-            deps.onPermissionRequest({
-              sessionId,
-              toolUseId: side.toolUseId,
-              toolName: side.toolName,
-              input: side.input,
-              description: side.description,
-            });
+            handlePermissionRequest(sessionId, side, writer);
           } else if (side.kind === "compact") {
             deps.onCompact?.();
           }
