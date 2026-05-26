@@ -17,6 +17,7 @@ import { useAgentsStore } from "./agentsStore";
 import { usePlanStore } from "./planStore";
 import { useTodosStore } from "./todoStore";
 import type { AgentUsage } from "../lib/agent";
+import { createClaudeCliTransport } from "../lib/claudeCliTransport";
 import { EMPTY_PROVIDER_KEYS, type ProviderKeys } from "../lib/keyring";
 import {
   deleteSessionData,
@@ -234,7 +235,7 @@ function makeChat(sessionId: string): Chat<UIMessage> {
     getSessionId: () => sessionId,
   };
 
-  const transport = createContextAwareTransport({
+  const baseProviderTransport = createContextAwareTransport({
     getKeys: () => useChatStore.getState().apiKeys,
     toolContext,
     getModelId: () => useChatStore.getState().selectedModelId,
@@ -294,6 +295,62 @@ function makeChat(sessionId: string): Chat<UIMessage> {
       });
     },
   }) as unknown as ChatTransport<UIMessage>;
+
+  const claudeCliTransport = createClaudeCliTransport({
+    getTeraxSessionId: () => sessionId,
+    getLive: () => {
+      const live = useChatStore.getState().live;
+      return {
+        cwd: live.getCwd(),
+        workspaceRoot: live.getWorkspaceRoot(),
+      };
+    },
+    getModelId: () => useChatStore.getState().selectedModelId,
+    getBinaryPath: () => {
+      const v = usePreferencesStore.getState().claudeCliBinaryPath;
+      return v && v.trim() ? v.trim() : undefined;
+    },
+    getExtraAddDirs: () => usePreferencesStore.getState().claudeCliExtraAddDirs,
+    getClaudeSessionId: (id) =>
+      useChatStore.getState().sessions.find((s) => s.id === id)?.claudeCliSessionId,
+    setClaudeSessionId: (id, claudeId) => {
+      const next = useChatStore.getState().sessions.map((s) =>
+        s.id === id ? { ...s, claudeCliSessionId: claudeId, updatedAt: Date.now() } : s,
+      );
+      useChatStore.setState({ sessions: next });
+      void saveSessionsList(next);
+    },
+    clearClaudeSessionId: (id) => {
+      const next = useChatStore.getState().sessions.map((s) =>
+        s.id === id ? { ...s, claudeCliSessionId: undefined, updatedAt: Date.now() } : s,
+      );
+      useChatStore.setState({ sessions: next });
+      void saveSessionsList(next);
+    },
+    onCompact: () => {
+      useChatStore.getState().patchAgentMeta({
+        compactionNotice: { droppedCount: 0, at: Date.now() },
+      });
+    },
+    onStep: (step) => {
+      useChatStore.getState().patchAgentMeta({ step });
+    },
+  });
+
+  const transport: ChatTransport<UIMessage> = {
+    sendMessages: (options) => {
+      const provider = getModel(useChatStore.getState().selectedModelId).provider;
+      return provider === "claude-cli"
+        ? claudeCliTransport.sendMessages(options)
+        : baseProviderTransport.sendMessages(options);
+    },
+    reconnectToStream: (options) => {
+      const provider = getModel(useChatStore.getState().selectedModelId).provider;
+      return provider === "claude-cli"
+        ? claudeCliTransport.reconnectToStream(options)
+        : baseProviderTransport.reconnectToStream(options);
+    },
+  };
 
   const initialMessages = seedMessages.get(sessionId);
   seedMessages.delete(sessionId);

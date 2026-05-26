@@ -6,6 +6,9 @@ export type SessionMeta = {
   title: string;
   createdAt: number;
   updatedAt: number;
+  /** Set once a Claude Code CLI session has been established for this chat;
+   *  used to pass `--resume` on subsequent turns. Cleared on stale-id retry. */
+  claudeCliSessionId?: string;
 };
 
 const STORE_PATH = "terax-ai-sessions.json";
