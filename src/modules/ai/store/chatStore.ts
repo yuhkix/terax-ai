@@ -303,6 +303,8 @@ function makeChat(sessionId: string): Chat<UIMessage> {
       return {
         cwd: live.getCwd(),
         workspaceRoot: live.getWorkspaceRoot(),
+        activeFile: live.getActiveFile(),
+        terminalPrivate: live.isActiveTerminalPrivate(),
       };
     },
     getModelId: () => useChatStore.getState().selectedModelId,
@@ -311,6 +313,8 @@ function makeChat(sessionId: string): Chat<UIMessage> {
       return v && v.trim() ? v.trim() : undefined;
     },
     getExtraAddDirs: () => usePreferencesStore.getState().claudeCliExtraAddDirs,
+    getCustomInstructions: () =>
+      usePreferencesStore.getState().customInstructions,
     getClaudeSessionId: (id) =>
       useChatStore.getState().sessions.find((s) => s.id === id)?.claudeCliSessionId,
     setClaudeSessionId: (id, claudeId) => {

@@ -12,6 +12,7 @@ import {
   registerClaudeCliApproval,
 } from "./claudeCliApproval";
 import { ClaudeCliEventTranslator, type Side } from "./claudeCliEvents";
+import { readTeraxMd } from "./projectMemory";
 
 const CLI_MODEL_ARG: Record<string, string> = {
   "claude-cli-opus-4-7": "claude-opus-4-7",
@@ -28,6 +29,8 @@ export function cliModelArg(modelId: string | undefined): string | undefined {
 export type ClaudeCliLive = {
   cwd: string | null;
   workspaceRoot: string | null;
+  activeFile: string | null;
+  terminalPrivate: boolean;
 };
 
 export type ClaudeCliDeps = {
@@ -36,6 +39,7 @@ export type ClaudeCliDeps = {
   getModelId: () => string | undefined;
   getBinaryPath: () => string | undefined;
   getExtraAddDirs: () => string[];
+  getCustomInstructions: () => string;
   getClaudeSessionId: (sessionId: string) => string | undefined;
   setClaudeSessionId: (sessionId: string, claudeId: string) => void;
   clearClaudeSessionId: (sessionId: string) => void;
@@ -50,7 +54,33 @@ type SpawnOptsPayload = {
   resumeClaudeSessionId?: string;
   binaryPath?: string;
   enableMcp: boolean;
+  systemPrompt?: string;
 };
+
+function buildSystemPrompt(
+  teraxMd: string | null,
+  customInstructions: string,
+): string | undefined {
+  const blocks: string[] = [];
+  if (teraxMd && teraxMd.trim().length > 0) {
+    blocks.push(`## PROJECT — TERAX.md\n${teraxMd.trim()}`);
+  }
+  const ci = customInstructions.trim();
+  if (ci.length > 0) {
+    blocks.push(`## USER INSTRUCTIONS\n${ci}`);
+  }
+  return blocks.length > 0 ? blocks.join("\n\n") : undefined;
+}
+
+function buildEnvBlock(live: ClaudeCliLive): string | null {
+  const lines: string[] = [];
+  if (live.workspaceRoot) lines.push(`workspace_root: ${live.workspaceRoot}`);
+  if (live.cwd) lines.push(`active_terminal_cwd: ${live.cwd}`);
+  if (live.activeFile) lines.push(`active_file: ${live.activeFile}`);
+  if (live.terminalPrivate) lines.push("active_terminal_mode: private");
+  if (lines.length === 0) return null;
+  return `<env>\n${lines.join("\n")}\n</env>`;
+}
 
 function lastUserText(messages: UIMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -132,11 +162,23 @@ export function createClaudeCliTransport(deps: ClaudeCliDeps): ChatTransport<UIM
     async sendMessages(options) {
       const sessionId = deps.getTeraxSessionId();
       if (!sessionId) throw new Error("No active terax session");
-      const text = lastUserText(options.messages);
+      const rawText = lastUserText(options.messages);
       const live = deps.getLive();
       const claudeSessionId = deps.getClaudeSessionId(sessionId);
+      const envBlock = buildEnvBlock(live);
+      const text = envBlock ? `${envBlock}\n\n${rawText}` : rawText;
+      const teraxMd = await readTeraxMd(live.workspaceRoot);
+      const systemPrompt = buildSystemPrompt(teraxMd, deps.getCustomInstructions());
 
-      const stream = await runOne(deps, sessionId, text, live, claudeSessionId, options.messages);
+      const stream = await runOne(
+        deps,
+        sessionId,
+        text,
+        live,
+        claudeSessionId,
+        systemPrompt,
+        options.messages,
+      );
       return stream;
     },
     async reconnectToStream() {
@@ -151,6 +193,7 @@ async function runOne(
   text: string,
   live: ClaudeCliLive,
   resumeClaudeSessionId: string | undefined,
+  systemPrompt: string | undefined,
   originalMessages: UIMessage[],
 ): Promise<ReadableStream<UIMessageChunk>> {
   return createUIMessageStream<UIMessage>({
@@ -199,6 +242,7 @@ async function runOne(
         resumeClaudeSessionId,
         binaryPath: deps.getBinaryPath(),
         enableMcp: true,
+        systemPrompt,
       };
 
       try {
@@ -223,7 +267,15 @@ async function runOne(
       if (staleSession && resumeClaudeSessionId) {
         deps.clearClaudeSessionId(sessionId);
         writer.write({ type: "error", errorText: "Claude session expired; retrying with a fresh session." });
-        const retry = await runOne(deps, sessionId, text, live, undefined, originalMessages);
+        const retry = await runOne(
+          deps,
+          sessionId,
+          text,
+          live,
+          undefined,
+          systemPrompt,
+          originalMessages,
+        );
         writer.merge(retry);
         return;
       }

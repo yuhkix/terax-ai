@@ -36,6 +36,10 @@ pub struct SpawnOpts {
     pub binary_path: Option<String>,
     pub enable_mcp: Option<bool>,
     pub skip_permissions: Option<bool>,
+    /// Extra content appended to Claude's system prompt for this run.
+    /// Used to carry TERAX.md, the user's custom instructions, and any
+    /// other terax-side context Claude doesn't pick up automatically.
+    pub system_prompt: Option<String>,
 }
 
 impl SpawnOpts {
@@ -206,6 +210,9 @@ pub async fn start(
     cmd.args(["--output-format", "stream-json", "--verbose"]);
     if opts.skip_permissions() {
         cmd.arg("--dangerously-skip-permissions");
+    }
+    if let Some(sp) = opts.system_prompt.as_deref().filter(|s| !s.trim().is_empty()) {
+        cmd.args(["--append-system-prompt", sp]);
     }
     if let Some(resume) = opts
         .resume_claude_session_id
