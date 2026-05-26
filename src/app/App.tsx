@@ -42,6 +42,7 @@ import {
   NewEditorDialog,
   type EditorPaneHandle,
 } from "@/modules/editor";
+import { useDiscordPresence } from "@/modules/discord";
 import {
   GitHistoryStack,
   type GitHistorySearchHandle,
@@ -609,6 +610,11 @@ export default function App() {
     tabs,
     launchCwd ?? home,
   );
+
+  useDiscordPresence({
+    activeTab,
+    workspaceRoot: explorerRoot ?? launchCwd ?? home ?? null,
+  });
 
   useEffect(() => {
     setActiveSearchAddon(

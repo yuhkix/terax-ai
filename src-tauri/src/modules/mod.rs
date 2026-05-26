@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod ai;
+pub mod discord;
 pub mod fs;
 pub mod git;
 #[cfg(windows)]

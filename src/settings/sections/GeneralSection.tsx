@@ -21,6 +21,7 @@ import {
   TERMINAL_SCROLLBACK_PRESETS,
   setAgentNotifications,
   setAutostart,
+  setDiscordPresenceEnabled,
   setRestoreWindowState,
   setShowHidden,
   setTerminalFontFamily,
@@ -76,6 +77,9 @@ export function GeneralSection() {
   const terminalScrollback = usePreferencesStore((s) => s.terminalScrollback);
   const zoomLevel = usePreferencesStore((s) => s.zoomLevel);
   const agentNotifications = usePreferencesStore((s) => s.agentNotifications);
+  const discordPresenceEnabled = usePreferencesStore(
+    (s) => s.discordPresenceEnabled,
+  );
 
   useEffect(() => {
     let alive = true;
@@ -303,6 +307,19 @@ export function GeneralSection() {
           <Switch
             checked={agentNotifications}
             onCheckedChange={(v) => void setAgentNotifications(v)}
+          />
+        </SettingRow>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label>Integrations</Label>
+        <SettingRow
+          title="Show activity on Discord"
+          description="Share current file / terminal in your Discord status. File names only."
+        >
+          <Switch
+            checked={discordPresenceEnabled}
+            onCheckedChange={(v) => void setDiscordPresenceEnabled(v)}
           />
         </SettingRow>
       </div>

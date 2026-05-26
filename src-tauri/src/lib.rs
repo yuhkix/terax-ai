@@ -1,6 +1,6 @@
 pub mod modules;
 
-use modules::{agent, ai, fs, git, net, pty, secrets, shell, workspace};
+use modules::{agent, ai, discord, fs, git, net, pty, secrets, shell, workspace};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_window_state::StateFlags;
@@ -123,6 +123,7 @@ pub fn run() {
             registry
         })
         .manage(LaunchDir(Mutex::new(cli_dir)))
+        .manage(discord::DiscordState::default())
         .invoke_handler(tauri::generate_handler![
             pty::pty_open,
             pty::pty_write,
@@ -190,6 +191,9 @@ pub fn run() {
             ai::ai_claude_cli_steer,
             ai::ai_claude_cli_approve,
             ai::ai_claude_cli_stop,
+            discord::discord_update_activity,
+            discord::discord_clear_activity,
+            discord::discord_invite_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
