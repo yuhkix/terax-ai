@@ -501,7 +501,7 @@ export const MODELS = [
     label: "Claude Code · Opus 4.7",
     hint: "via CLI",
     description: "Anthropic Opus 4.7 via the local Claude Code CLI. No API key needed.",
-    capabilities: { intelligence: 5, speed: 2, cost: 5 },
+    capabilities: { intelligence: 5, speed: 2, cost: 1 },
     tags: ["vision", "reasoning", "tools", "coding"],
   },
   {
@@ -510,7 +510,7 @@ export const MODELS = [
     label: "Claude Code · Opus 4.7 (1M)",
     hint: "1M ctx",
     description: "Opus 4.7 with 1M context window via the Claude Code CLI.",
-    capabilities: { intelligence: 5, speed: 2, cost: 5 },
+    capabilities: { intelligence: 5, speed: 2, cost: 1 },
     tags: ["vision", "reasoning", "tools", "coding"],
   },
   {
@@ -519,7 +519,7 @@ export const MODELS = [
     label: "Claude Code · Sonnet 4.6",
     hint: "via CLI",
     description: "Anthropic Sonnet 4.6 via the local Claude Code CLI. No API key needed.",
-    capabilities: { intelligence: 4, speed: 4, cost: 5 },
+    capabilities: { intelligence: 4, speed: 4, cost: 3 },
     tags: ["vision", "tools", "coding"],
   },
   {
@@ -528,7 +528,7 @@ export const MODELS = [
     label: "Claude Code · Haiku 4.5",
     hint: "via CLI",
     description: "Anthropic Haiku 4.5 via the local Claude Code CLI. No API key needed.",
-    capabilities: { intelligence: 3, speed: 5, cost: 5 },
+    capabilities: { intelligence: 3, speed: 5, cost: 4 },
     tags: ["vision", "tools"],
   },
 ] as const satisfies readonly ModelInfo[];
